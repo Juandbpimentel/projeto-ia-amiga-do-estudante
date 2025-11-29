@@ -6,11 +6,21 @@ on:
 jobs:
   provision:
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Validate required secrets (quick check)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          RENDER_TOKEN: ${{ secrets.RENDER_TOKEN }}
+        run: |
+          echo "Validating presence of critical secrets..."
+          if [ -z "${VERCEL_TOKEN:-}" ]; then echo "Missing VERCEL_TOKEN secret" && exit 1; fi
+          if [ -z "${RENDER_TOKEN:-}" ]; then echo "Missing RENDER_TOKEN secret" && exit 1; fi
 
       # REMOVIDO: Passo de apt-get (curl e jq já existem nativamente)
 
