@@ -208,6 +208,17 @@ jobs:
             echo "RENDER_TOKEN or RENDER_SERVICE_ID missing; skipping Render deployment"
             exit 0
           fi
+      - name: Confirm Render envs (keys only)
+        run: |
+          set -euo pipefail
+          echo "Listing Render env var keys for ${RENDER_SERVICE_ID} (keys only, values hidden)..."
+          keys=$(curl -s -H "Authorization: Bearer ${RENDER_TOKEN}" "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/env-vars" | jq -r '.[].key' || true)
+          echo "$keys"
+          if echo "$keys" | grep -q '^GOOGLE_API_KEY$'; then
+            echo "GOOGLE_API_KEY is present on Render service"
+          else
+            echo "GOOGLE_API_KEY is not present on Render service"
+          fi
               echo "Triggering Render deployment for service ${RENDER_SERVICE_ID}"
           # Use hook when available to avoid API auth complexities
           if [ -n "${RENDER_DEPLOY_HOOK:-}" ]; then

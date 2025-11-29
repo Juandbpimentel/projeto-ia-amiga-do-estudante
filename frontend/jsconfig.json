@@ -1,8 +1,3 @@
 {
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"]
-    }
-  }
+  "note": "jsconfig.json removed; path aliases are not used. Configure import paths manually with relative paths."
 }

@@ -54,6 +54,38 @@ if allow_origins:
 
 SESSION_STATE: Dict[str, Dict[str, object]] = {}
 
+# Verify Google credentials presence (either GOOGLE_API_KEY or a Google Service Account JSON via GOOGLE_SERVICE_ACCOUNT_JSON/
+# GOOGLE_APPLICATION_CREDENTIALS). This helps surface missing env issues earlier and with clearer instructions.
+missing_google_key = False
+has_api_key = bool(os.environ.get("GOOGLE_API_KEY"))
+has_service_json = bool(os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON"))
+has_application_creds = bool(
+    os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+) and os.path.exists(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
+
+# Allow developers to bypass the strict requirement in non-production environments by setting
+# REQUIRE_GOOGLE_CREDENTIALS=false. By default, we require credentials (for production deployments).
+require_creds = os.environ.get("REQUIRE_GOOGLE_CREDENTIALS", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+
+if require_creds and not (has_api_key or has_service_json or has_application_creds):
+    logger.critical(
+        "❌ [SISTEMA] Nenhuma credencial Google detectada. Defina `GOOGLE_API_KEY` ou `GOOGLE_SERVICE_ACCOUNT_JSON`/`GOOGLE_APPLICATION_CREDENTIALS` no ambiente."
+    )
+    # Raise early with a friendly message so Render logs show guidance
+    raise RuntimeError(
+        "Missing Google credentials. Provide GOOGLE_API_KEY or GOOGLE_SERVICE_ACCOUNT_JSON/GOOGLE_APPLICATION_CREDENTIALS. See DEPLOY.md for instructions."
+    )
+elif not require_creds and not (
+    has_api_key or has_service_json or has_application_creds
+):
+    logger.warning(
+        "⚠️ [SISTEMA] Nenhuma credencial Google detectada, mas REQUIRE_GOOGLE_CREDENTIALS=false, iniciando sem conexão GenAI."
+    )
+
 try:
     client = genai.Client()
 except Exception as exc:

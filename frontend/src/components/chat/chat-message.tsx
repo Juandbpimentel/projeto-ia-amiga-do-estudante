@@ -2,7 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ChatMessage } from "@/types/chat";
+import { ChatMessage } from "../../types/chat";
 
 interface ChatMessageProps {
   message: ChatMessage;
