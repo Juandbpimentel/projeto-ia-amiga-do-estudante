@@ -13,6 +13,7 @@ from .tooling import (
     handle_tool_invocation,
     parse_tool_call_from_text,
     extract_function_call_from_response,
+    find_tool_by_name,
 )
 from .session_manager import ensure_chat_obj, get_local_chat
 
@@ -234,21 +235,20 @@ def handle_chat_message(
         # delegate tool handling to `modules.tooling.handle_tool_invocation`
 
         # Quick heuristic: if user directly asks about Sigaa/Moodle status, call the tool
-        import re
+        # Use centralized helper to detect status queries (moodle/sigaa)
+        from .tooling import is_status_query
 
-        if re.search(
-            r"\bsigaa\b|\bmoodle\b|status do (sigaa|moodle)|est[áa] online",
-            message,
-            flags=re.IGNORECASE,
-        ):
+        if is_status_query(message):
             # find the function in my_tools quickly
-            target = None
-            for t in my_tools or []:
-                if hasattr(t, "__name__") and t.__name__.casefold().endswith(
-                    "verifica_status_sites_para_os_estudantes"
-                ):
-                    target = t
-                    break
+            # Prefer deterministic lookup via tooling.find_tool_by_name
+            target = find_tool_by_name(
+                my_tools, "verifica_status_sites_para_os_estudantes"
+            )
+            if target:
+                logger.debug(
+                    "ℹ️ [CHAT] Heurística de status encontrada - ferramenta detectada: %s",
+                    getattr(target, "__name__", str(target)),
+                )
             if target:
                 out = handle_tool_invocation(
                     chat_obj,
@@ -264,7 +264,17 @@ def handle_chat_message(
                 )
                 if out:
                     return out
-                # else continue to SDK fallback
+                # If we couldn't run the tool despite the heuristic, fail fast with a safe message
+                logger.warning(
+                    "⚠️ [CHAT] Heurística detectou pedido de status mas ferramenta não retornou (session=%s)",
+                    session_id,
+                )
+                fallback = "Status dos sistemas temporariamente indisponível. Tente novamente mais tarde."
+                try:
+                    append_message(session_id, "assistant", fallback)
+                except Exception:
+                    pass
+                return {"message": fallback}
 
         response = chat_obj.send_message(message)
         # If SDK returned an awaitable (async variant), await it synchronously
@@ -337,6 +347,16 @@ def handle_chat_message(
                 if target is None:
                     # try strip prefixes like 'default_api.' or 'api.'
                     target = tools_map.get(func_name.split(".")[-1].casefold())
+                # If the user explicitly asked for status but the model returned a
+                # suggestion to call a different tool, prefer the status tool.
+                from .tooling import is_status_query
+
+                if is_status_query(message) and (
+                    not (func_name and "verifica_status" in (func_name or ""))
+                ):
+                    target = find_tool_by_name(
+                        my_tools, "verifica_status_sites_para_os_estudantes"
+                    )
                 if target:
                     logger.info(
                         "ℹ️ [CHAT] Executando ferramenta (struct) '%s' com args=%s (session=%s)",
@@ -377,7 +397,21 @@ def handle_chat_message(
                 target = tools_map.get(func_name.casefold())
                 if target is None:
                     target = tools_map.get(func_name.split(".")[-1].casefold())
+                from .tooling import is_status_query
+
+                if is_status_query(message) and (
+                    not (func_name and "verifica_status" in (func_name or ""))
+                ):
+                    # Force the status tool even if the textual call suggests a different one
+                    target = find_tool_by_name(
+                        my_tools, "verifica_status_sites_para_os_estudantes"
+                    )
                 if target:
+                    logger.debug(
+                        "ℹ️ [CHAT] Ferramenta textual detectada: %s (session=%s)",
+                        func_name,
+                        session_id,
+                    )
                     logger.info(
                         "ℹ️ [CHAT] Executando ferramenta '%s' com args=%s (session=%s)",
                         func_name,

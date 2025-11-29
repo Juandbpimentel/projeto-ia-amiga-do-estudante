@@ -8,27 +8,73 @@ logger = logging.getLogger("UFC_AGENT")
 
 
 def find_tool_by_name(my_tools: List[Any], func_name: str) -> Optional[Any]:
+    """Return the tool matching func_name using multiple tolerant checks.
+
+    Supports: __name__, __qualname__, module-prefixed names, decorated/wrapped functions,
+    and case-insensitive matches. Returns None when not found.
+    """
     if not my_tools or not func_name:
         return None
     key = func_name.casefold()
-    tools_map = {}
+    tools_map: Dict[str, Any] = {}
     for t in my_tools:
-        if not hasattr(t, "__name__"):
-            continue
-        tools_map[t.__name__.casefold()] = t
-        tools_map[f"{t.__module__}.{t.__name__}".casefold()] = t
-    # direct match
+        # try to find a readable name for the tool
+        name_candidates = []
+        n = getattr(t, "__name__", None)
+        if n:
+            name_candidates.append(n)
+        q = getattr(t, "__qualname__", None)
+        if q and q != n:
+            name_candidates.append(q)
+        # unwrap decorated callables if present
+        wrapped = getattr(t, "__wrapped__", None)
+        if wrapped:
+            wn = getattr(wrapped, "__name__", None)
+            if wn and wn not in name_candidates:
+                name_candidates.append(wn)
+            wq = getattr(wrapped, "__qualname__", None)
+            if wq and wq not in name_candidates:
+                name_candidates.append(wq)
+
+        # also register module-qualified name
+        mod_key = f"{getattr(t, '__module__', '')}.{getattr(t, '__name__', '')}"
+        for cand in name_candidates:
+            tools_map[cand.casefold()] = t
+            tools_map[f"{getattr(t, '__module__', '')}.{cand}".casefold()] = t
+        if mod_key:
+            tools_map[mod_key.casefold()] = t
+
+    # try direct match
     target = tools_map.get(key)
     if target:
         return target
     # try stripping module prefixes
     short = func_name.split(".")[-1].casefold()
-    return tools_map.get(short)
+    target = tools_map.get(short)
+    if target:
+        return target
+    # fallback: search for a tool whose function name contains the key fragment
+    for k, t in tools_map.items():
+        if key in k:
+            return t
+    return None
+
+
+def is_status_query(text: str) -> bool:
+    """Return True if the user's message appears to be asking for site status (Sigaa/Moodle)."""
+    if not text or not isinstance(text, str):
+        return False
+    import re
+
+    pattern = r"\bsigaa\b|\bmoodle\b|status do (sigaa|moodle)|est[áa]\s*online|est[áa]\s*funcion(a|ando)|funciona(n|ndo)|(moodle|sigaa)\s*funcion"
+    return bool(re.search(pattern, text, flags=re.IGNORECASE))
 
 
 def safe_call_tool(target: Any, kwargs: Optional[dict]) -> Tuple[bool, str]:
     try:
         res = target(**(kwargs or {}))
+        # If the target returns a coroutine, await it to get the final result
+        res = _await_if_needed(res)
         if isinstance(res, (dict, list)):
             try:
                 res = json.dumps(res, ensure_ascii=False, indent=2)
@@ -68,6 +114,7 @@ def append_tool_and_ask_model(
     """Append the raw tool output and ask the model to format it.
     Returns (reply_text, True) on success or (fallback_text, False).
     """
+    # persist the tool result to the shared history first
     try:
         append_message(session_id, "tool", f"{target_name} output:\n{result_text}")
     except Exception:
@@ -79,8 +126,12 @@ def append_tool_and_ask_model(
             "ao usuário. Apenas retorne a resposta final em Português."
         )
 
+    # To ensure the model sees the actual tool output in this request (SDK history might not
+    # be in sync with the persisted session store), we include the result_text inline in the
+    # prompt we send to the model so it can format the provided output.
     try:
-        followup = chat_obj.send_message(format_prompt)
+        combined_prompt = f"{target_name} output:\n{result_text}\n\n{format_prompt}"
+        followup = chat_obj.send_message(combined_prompt)
         followup = _await_if_needed(followup)
         # Render back in calling code using the SDK's render utils; return raw text
         # We return the followup object for the caller to render if needed.
@@ -107,6 +158,11 @@ def handle_tool_invocation(
     target = find_tool_by_name(my_tools, func_name)
     if not target:
         return None
+    logger.debug(
+        "ℹ️ [TOOLING] Invoking tool: %s (resolved=%s)",
+        func_name,
+        getattr(target, "__name__", str(target)),
+    )
     ok, result_text = safe_call_tool(target, kwargs)
     if not ok:
         # Return friendly fallback
@@ -147,7 +203,18 @@ def parse_tool_call_from_text(text: str):
 
     if not text or not isinstance(text, str):
         return None, None
-    m = re.search(r"([\w\.]+)\s*\((.*)\)", text)
+    lowered = text.casefold()
+    # Heuristics: skip if the model is giving code examples or the text includes example markers
+    if (
+        "exemplo" in lowered
+        or "ex:" in lowered
+        or "```" in text
+        or "```python" in lowered
+    ):
+        return None, None
+    # Look for a bare function-like invocations; prefer matches at the start of a line to
+    # avoid matching textual examples embedded inside the model output.
+    m = re.search(r"^\s*([\w\.]+)\s*\((.*)\)", text, flags=re.M)
     if not m:
         return None, None
     full_name = m.group(1).strip()

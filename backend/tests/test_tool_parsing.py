@@ -34,8 +34,8 @@ def test_parse_missing_parenthesis_or_invalid():
 def test_parse_prefixed_default_api_call():
     text = "print(default_api.verifica_status_sites_para_os_estudantes())"
     name, kwargs = _parse_tool_call_from_text(text)
-    assert name == "verifica_status_sites_para_os_estudantes"
-    assert isinstance(kwargs, dict)
+    # Now we ignore printed example calls to avoid accidental invocation.
+    assert name is None and kwargs is None
 
 
 def test_structured_prefixed_function_call():
@@ -75,3 +75,9 @@ def test_extract_structured_function_call():
     name, kwargs = _extract_function_call_from_response(resp)
     assert name == "verifica_status_sites_para_os_estudantes"
     assert isinstance(kwargs, dict)
+
+
+def test_ignore_code_block_printed_example():
+    text = "```python\nprint(default_api.buscar_dados_professores(nome_professor=\"Ana\"))\n```"
+    name, kwargs = _parse_tool_call_from_text(text)
+    assert name is None and kwargs is None

@@ -23,7 +23,7 @@ SECTION_LABELS = {
     "jantar": "Jantar",
 }
 
-MODEL_NAME = "gemini-2.5-flash-lite"
+MODEL_NAME = "gemini-2.5-flash"
 
 # selection ttl default
 SELECTION_TTL_MINUTES = 3
