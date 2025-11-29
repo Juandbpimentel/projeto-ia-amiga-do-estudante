@@ -78,6 +78,6 @@ def test_extract_structured_function_call():
 
 
 def test_ignore_code_block_printed_example():
-    text = "```python\nprint(default_api.buscar_dados_professores(nome_professor=\"Ana\"))\n```"
+    text = '```python\nprint(default_api.buscar_dados_professores(nome_professor="Ana"))\n```'
     name, kwargs = _parse_tool_call_from_text(text)
     assert name is None and kwargs is None
