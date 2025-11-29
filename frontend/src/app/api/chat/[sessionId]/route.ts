@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getBackendUrl } from "../../../../lib/env";
+import { getBackendUrl } from "lib/env";
 
 const BACKEND_URL = getBackendUrl();
 

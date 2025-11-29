@@ -15,6 +15,9 @@ downloads/
 eggs/
 .eggs/
 lib/
+# Allow tracking the frontend's src/lib folder (contains frontend helper modules)
+!frontend/src/lib/
+!frontend/src/lib/**
 lib64/
 parts/
 sdist/

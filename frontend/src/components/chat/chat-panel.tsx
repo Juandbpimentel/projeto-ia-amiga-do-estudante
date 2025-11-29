@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatMessage } from "../../types/chat";
-import { sendChatMessage, startChat } from "../../lib/api";
+import { sendChatMessage, startChat } from "lib/api";
 import { ChatMessageBubble } from "./chat-message";
 import { ChatInput } from "./chat-input";
 
