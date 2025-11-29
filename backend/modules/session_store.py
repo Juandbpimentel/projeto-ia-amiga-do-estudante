@@ -54,7 +54,9 @@ def get_messages(session_id: str) -> Optional[List[Dict[str, str]]]:
         if raw is None:
             return None
         try:
-            return json.loads(raw) # type: ignore
+                if isinstance(raw, (bytes, bytearray)):
+                    raw = raw.decode("utf-8")
+                return json.loads(raw) # type: ignore
         except Exception:
             return None
     result = _in_memory_history.get(session_id)
@@ -106,7 +108,9 @@ def get_state(session_id: str) -> Optional[dict]:
         if raw is None:
             return None
         try:
-            return json.loads(raw) # type: ignore
+                if isinstance(raw, (bytes, bytearray)):
+                    raw = raw.decode("utf-8")
+                return json.loads(raw) # type: ignore
         except Exception:
             return None
     return _in_memory_state.get(session_id)

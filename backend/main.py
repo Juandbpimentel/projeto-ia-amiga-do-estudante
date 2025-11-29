@@ -20,7 +20,7 @@ from modules import (
 from modules.config import MODEL_NAME
 import os
 import glob
-from modules.session_store import clear_all_sessions
+from modules.session_store import clear_all_sessions, list_sessions
 
 load_dotenv()
 
@@ -77,7 +77,7 @@ has_api_key = bool(os.environ.get("GOOGLE_API_KEY"))
 has_service_json = bool(os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON"))
 has_application_creds = bool(
     os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-) and os.path.exists(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
+) and os.path.exists(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")) # type: ignore
 
 # Allow developers to bypass the strict requirement in non-production environments by setting
 # REQUIRE_GOOGLE_CREDENTIALS=false. By default, we require credentials (for production deployments).
@@ -147,6 +147,18 @@ async def debug_alocacoes():
         }
     except Exception as e:
         logger.exception("Erro debug carregar_alocacoes: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/debug/sessions", include_in_schema=False)
+async def debug_sessions():
+    try:
+        sessions = list_sessions()
+        return {
+            "count": len(sessions),
+            "sessions": sessions[:50],
+        }
+    except Exception as e:
+        logger.exception("Erro debug listar sessões: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -242,7 +254,11 @@ async def start_chat():
         f"🚀 [SISTEMA] Iniciando nova sessão de chat (COM HISTÓRICO): {session_id}"
     )
 
-    status = check_system_status()
+    try:
+        status = check_system_status()
+    except Exception as exc:
+        logger.warning("⚠️ [SISTEMA] Falha ao obter status dos sistemas: %s", exc)
+        status = "Status dos sistemas temporariamente indisponível. Tente novamente mais tarde."
 
     system_instr = f"""
     DATA ATUAL DO SISTEMA: {now.strftime("%Y-%m-%d")} ({now.strftime("%A")}).
@@ -371,6 +387,7 @@ async def start_chat():
 @app.post("/chat/{session_id}")
 async def chat(session_id: str, request: ChatRequest):
     try:
+        logger.debug("ℹ️ [ROUTE] POST /chat incoming session_id=%s", session_id)
         return chat_mod.handle_chat_message(
             client,
             session_id,

@@ -15,6 +15,7 @@ Neste projeto, estudarei como criar um chatbot com a API do Gemini e como implem
 	```pwsh
 	cd backend
 	copy .env.example .env  # ajuste as chaves necessárias
+	docker compose up -d redis  # (opcional) start local Redis for development
 	pip install -r requirements.txt
 	uvicorn main:app --reload --host 0.0.0.0 --port 8000
 	```

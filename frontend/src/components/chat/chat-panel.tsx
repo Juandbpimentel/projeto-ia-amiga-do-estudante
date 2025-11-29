@@ -47,7 +47,9 @@ export function ChatPanel() {
 
     try {
       const data = await startChat();
+      console.debug("[ChatPanel] startChat response:", data);
       setSessionId(data.session_id);
+      console.debug("[ChatPanel] sessionId set:", data.session_id);
       setMessages([
         {
           id: createId(),
@@ -103,7 +105,14 @@ export function ChatPanel() {
     setError(null);
 
     try {
+      console.debug(
+        "[ChatPanel] sendChatMessage request: sessionId=",
+        sessionId,
+        "message=",
+        userMessage.content
+      );
       const response = await sendChatMessage(sessionId, userMessage.content);
+      console.debug("[ChatPanel] sendChatMessage response:", response);
       const content = response.selected_query
         ? `${response.message}\n\n🔍 Consulta confirmada: ${response.selected_query}`
         : response.message;

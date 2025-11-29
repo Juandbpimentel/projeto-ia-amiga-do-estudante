@@ -17,13 +17,28 @@ def build_status_report(
     for name, url in urls.items():
         try:
             logger.info("%s: %s", log_context, name)
-            resp = requests.get(url, headers=HEADERS, timeout=5, verify=False)
+            # timeout shorter because we need fast responses during chat
+            resp = requests.get(url, headers=HEADERS, timeout=3, verify=False)
             status = "ONLINE" if resp.status_code == 200 else "OFFLINE"
         except requests.exceptions.RequestException as exc:
             status = "OFFLINE"
             logger.warning("⚠️ [REDE] Falha ao conectar em %s: %s", name, exc)
-        lines.append(f"- {name}: {status}")
-    return "\n".join(lines)
+        # Keep each line reasonably short to avoid huge tool output
+        line = f"- {name}: {status}"
+        if len(line) > 200:
+            line = f"- {name}: {status} (truncated)"
+        lines.append(line)
+    report = "\n".join(lines)
+    # Defensive: cap total length to avoid extreme outputs to the chat SDK
+    max_len = 2000
+    if len(report) > max_len:
+        logger.warning(
+            "⚠️ [SISTEMA] Status report too large; truncating to %d chars", max_len
+        )
+        report = report[:max_len] + "... (truncated)"
+    # Log a short preview of the report for diagnostics
+    logger.debug("ℹ️ [SISTEMA] Relatório de status (preview): %s", report[:200])
+    return report
 
 
 def verifica_status_sites_para_os_estudantes() -> str:
@@ -32,11 +47,68 @@ def verifica_status_sites_para_os_estudantes() -> str:
         "Moodle UFC Quixadá": "https://moodle2.quixada.ufc.br/login/index.php",
     }
     logger.info("🤖 [IA DEBUG] A IA solicitou verificação de status em tempo real.")
-    return build_status_report(
+    report = build_status_report(
         "=== STATUS DOS SITES PRINCIPAIS (Tempo Real) ===",
         urls,
         log_context="ℹ️ [TEMPO REAL] Verificando status de",
     )
+    logger.info("ℹ️ [SISTEMA] Verificação de status executada: %s chars", len(report))
+    return report
+
+
+def format_status_report(report: str, focus: str | None = None) -> str:
+    """Transforma um relatório de status em resposta humana concisa.
+    Se `focus` for fornecido (ex.: 'Moodle' ou 'Sigaa'), responde focando nesse serviço.
+    """
+    if not report:
+        return "Status dos sites temporariamente indisponível."
+    import re
+
+    lines = [line.strip() for line in report.splitlines() if line.strip()]
+    # Extract entries like 'Sigaa: ONLINE' or 'Moodle UFC Quixadá: ONLINE'
+    statuses = {}
+    for line in lines:
+        m = re.search(r"([A-Za-zÀ-ÖØ-öø-ÿ0-9\s]+):\s*(ONLINE|OFFLINE)", line, re.I)
+        if m:
+            name = m.group(1).strip()
+            status = m.group(2).upper()
+            statuses[name] = status
+
+    if not statuses:
+        return report
+
+    # Normalize focus matching
+    focus_key = None
+    if focus:
+        for k in statuses:
+            if focus.casefold() in k.casefold():
+                focus_key = k
+                break
+
+    online = [k for k, v in statuses.items() if v == "ONLINE"]
+    offline = [k for k, v in statuses.items() if v == "OFFLINE"]
+
+    if focus_key:
+        st = statuses.get(focus_key)
+        if st == "ONLINE":
+            return f"Sim — o {focus_key} está online."
+        else:
+            return f"Parece que o {focus_key} está offline (status: {st})."
+
+    if online and not offline:
+        if len(online) == 1:
+            return f"Sim — {online[0]} está online."
+        return f"Sim — {', '.join(online)} estão online."
+    if offline and not online:
+        return f"Nenhum dos serviços está online no momento: {', '.join(offline)}."
+    # Mixed
+    parts = []
+    if online:
+        parts.append(f"Online: {', '.join(online)}")
+    if offline:
+        parts.append(f"Offline: {', '.join(offline)}")
+    details = "; ".join(parts)
+    return f"Status resumido — {details}."
 
 
 def buscar_feriados(
