@@ -31,7 +31,7 @@ export function ChatPanel() {
   useEffect(() => {
     // Auto-clear errors after 10 seconds for a better UX.
     if (!error) return;
-    const timer = setTimeout(() => setError(null), 10000);
+    const timer = setTimeout(() => setError(null), 5000);
     return () => clearTimeout(timer);
   }, [error]);
 

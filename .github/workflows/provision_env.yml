@@ -1,7 +1,13 @@
 name: Provision Environment Variables (Vercel + Render)
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/provision_env.yml'
+      - 'backend/**'
+      - 'frontend/**'
 
 jobs:
   provision:

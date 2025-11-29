@@ -1,0 +1,95 @@
+import os
+import json
+import logging
+from typing import List, Dict, Optional
+
+logger = logging.getLogger("UFC_AGENT")
+
+REDIS_URL = os.environ.get("REDIS_URL")
+
+_redis = None
+_in_memory_history: Dict[str, List[Dict[str, str]]] = {}
+_in_memory_state: Dict[str, dict] = {}
+
+if REDIS_URL:
+    try:
+        import redis
+
+        _redis = redis.from_url(REDIS_URL)
+    except Exception as e:
+        logger.warning(
+            "Não foi possível conectar ao Redis (REDIS_URL). Irei usar fallback em memória: %s",
+            e,
+        )
+        _redis = None
+
+
+def _make_key(session_id: str) -> str:
+    return f"chat:history:{session_id}"
+
+
+def _make_state_key(session_id: str) -> str:
+    return f"chat:state:{session_id}"
+
+
+def create_session(
+    session_id: str, initial_messages: Optional[List[Dict[str, str]]] = None
+):
+    initial_messages = initial_messages or []
+    if _redis:
+        _redis.set(_make_key(session_id), json.dumps(initial_messages))
+    else:
+        _in_memory_history[session_id] = initial_messages
+
+
+def get_messages(session_id: str) -> Optional[List[Dict[str, str]]]:
+    if _redis:
+        raw = _redis.get(_make_key(session_id))
+        if raw is None:
+            return None
+        try:
+            return json.loads(raw)
+        except Exception:
+            return None
+    return _in_memory_history.get(session_id)
+
+
+def set_messages(session_id: str, messages: List[Dict[str, str]]):
+    if _redis:
+        _redis.set(_make_key(session_id), json.dumps(messages))
+    else:
+        _in_memory_history[session_id] = messages
+
+
+def append_message(session_id: str, role: str, text: str):
+    messages = get_messages(session_id)
+    if messages is None:
+        messages = []
+    messages.append({"role": role, "content": text})
+    set_messages(session_id, messages)
+
+
+def delete_session(session_id: str):
+    if _redis:
+        _redis.delete(_make_key(session_id))
+    else:
+        _in_memory_history.pop(session_id, None)
+
+
+def set_state(session_id: str, state: dict):
+    if _redis:
+        _redis.set(_make_state_key(session_id), json.dumps(state))
+    else:
+        _in_memory_state[session_id] = state
+
+
+def get_state(session_id: str) -> Optional[dict]:
+    if _redis:
+        raw = _redis.get(_make_state_key(session_id))
+        if raw is None:
+            return None
+        try:
+            return json.loads(raw)
+        except Exception:
+            return None
+    return _in_memory_state.get(session_id)

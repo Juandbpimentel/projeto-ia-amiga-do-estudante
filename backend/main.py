@@ -356,10 +356,12 @@ async def start_chat():
 async def chat(session_id: str, request: ChatRequest):
     try:
         return chat_mod.handle_chat_message(
+            client,
             session_id,
             request.message,
             SESSION_STATE,
             logger,
+            my_tools,
         )
     except HTTPException:
         # Preserve HTTPExceptions raised in the chat handlers
