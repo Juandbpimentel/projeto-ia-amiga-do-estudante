@@ -5,9 +5,9 @@ on:
     branches:
       - main
     paths:
-      - '.github/workflows/provision_env.yml'
-      - 'backend/**'
-      - 'frontend/**'
+      - ".github/workflows/provision_env.yml"
+      - "backend/**"
+      - "frontend/**"
 
 jobs:
   provision:
@@ -26,6 +26,7 @@ jobs:
       BACKEND_URL: ${{ secrets.BACKEND_URL }}
       GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       ALLOW_ORIGINS: ${{ secrets.ALLOW_ORIGINS }}
+      REDIS_URL: ${{ secrets.REDIS_URL }}
       VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
       RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
     permissions:
@@ -42,6 +43,8 @@ jobs:
           if [ -z "${RENDER_TOKEN:-}" ]; then echo "Missing RENDER_TOKEN secret" && exit 1; fi
           if [ -z "${RENDER_SERVICE_ID:-}" ]; then echo "Missing RENDER_SERVICE_ID secret" && exit 1; fi
           if [ -z "${BACKEND_URL:-}" ]; then echo "Missing BACKEND_URL secret" && exit 1; fi
+          # Optional: REDIS_URL is optional; recommended for multi-worker backends
+          if [ -z "${REDIS_URL:-}" ]; then echo "Warning: REDIS_URL secret is not set — session persistence across workers will not be available"; fi
 
       # REMOVIDO: Passo de apt-get (curl e jq já existem nativamente)
 
@@ -155,6 +158,12 @@ jobs:
           if [ -n "${ALLOW_ORIGINS:-}" ]; then
             update_or_create_render ALLOW_ORIGINS "${ALLOW_ORIGINS}" false
           fi
+          # Provision REDIS_URL to Render (if provided) — recommended for production
+          if [ -n "${REDIS_URL:-}" ]; then
+            update_or_create_render REDIS_URL "${REDIS_URL}" true
+          else
+            echo "Skipping REDIS_URL provisioning — not set in secrets"
+          fi
 
       - name: Trigger Vercel production deployment (hook first, fallback to API)
         run: |
@@ -224,6 +233,11 @@ jobs:
             echo "GOOGLE_API_KEY is present on Render service"
           else
             echo "GOOGLE_API_KEY is not present on Render service"
+          fi
+          if echo "$keys" | grep -q '^REDIS_URL$'; then
+            echo "REDIS_URL is present on Render service"
+          else
+            echo "REDIS_URL is not present on Render service"
           fi
               echo "Triggering Render deployment for service ${RENDER_SERVICE_ID}"
           # Use hook when available to avoid API auth complexities

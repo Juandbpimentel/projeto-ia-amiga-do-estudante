@@ -89,6 +89,7 @@ def start_chat(
                     {"role": "assistant", "content": welcome_msg},
                 ],
             )
+            logger.debug("ℹ️ [SESSION] Persistida nova sessão: %s", session_id)
             set_state(session_id, {"pending_selection": None})
         except Exception:
             # If session store not configured, ignore and fallback to in-memory
@@ -136,7 +137,7 @@ def handle_chat_message(
     message: str,
     session_state: Dict[str, Dict[str, Any]],
     logger: logging.Logger,
-    my_tools: List[Any] = None,
+    my_tools: List[Any] = None, # type: ignore
 ) -> Dict[str, Any]:
     """Handle a chat message: process pending selection or forward to the chat SDK.
     Returns a dictionary with the final text to reply.
@@ -243,11 +244,25 @@ def handle_chat_message(
         response = chat_obj.send_message(message)
         text = _render_response_text(response)
         if not text or not str(text).strip():
-            logger.error("❌ [ERRO] Resposta vazia do modelo (session=%s)", session_id)
-            # Return friendly message
+            # Log and retry once
+            logger.warning(
+                "⚠️ [CHAT] Modelo retornou resposta vazia (session=%s). Tentando retry 1x",
+                session_id,
+            )
+            try:
+                response = chat_obj.send_message(message)
+                text = _render_response_text(response)
+            except Exception as retry_exc:
+                logger.debug("⚠️ [CHAT] Retry falhou ao chamar modelo: %s", retry_exc)
+        if not text or not str(text).strip():
+            logger.error(
+                "❌ [ERRO] Resposta vazia do modelo após retry (session=%s)", session_id
+            )
             raise HTTPException(
                 status_code=500,
-                detail="Erro interno no servidor: resposta vazia do modelo. Tente novamente mais tarde.",
+                detail=(
+                    "Erro interno no servidor: resposta vazia do modelo. Tente novamente mais tarde."
+                ),
             )
         # persist assistant response back to the shared history
         try:

@@ -20,6 +20,7 @@ from modules import (
 from modules.config import MODEL_NAME
 import os
 import glob
+from modules.session_store import clear_all_sessions
 
 load_dotenv()
 
@@ -39,6 +40,15 @@ except Exception:
     # Avoid startup crash if cleanup fails
     pass
 
+# Clear any persisted sessions at startup — prevents stale sessions from previous runs.
+try:
+    deleted = clear_all_sessions()
+    logger.info(
+        "ℹ️ [SISTEMA] Limpeza de sessões no startup: %s chaves removidas", deleted
+    )
+except Exception as e:
+    logger.warning("⚠️ [SISTEMA] Falha ao limpar sessões no startup: %s", e)
+
 # Configure CORS to allow frontend origins, set via env var `ALLOW_ORIGINS` (comma-separated)
 # If ALLOW_ORIGINS is empty or not provided, no CORS is enabled (secure default).
 allow_origins_raw = os.environ.get("ALLOW_ORIGINS", "")
@@ -50,6 +60,12 @@ if allow_origins:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+    )
+
+# Warn if REDIS_URL missing — sessions won't be shared across workers without Redis.
+if not os.environ.get("REDIS_URL"):
+    logger.warning(
+        "⚠️ [SISTEMA] REDIS_URL não configurado: sessões serão armazenadas em memória local e não serão compartilhadas entre workers. Configure um Redis e defina REDIS_URL para suportar múltiplos workers."
     )
 
 SESSION_STATE: Dict[str, Dict[str, object]] = {}
