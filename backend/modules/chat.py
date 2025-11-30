@@ -23,6 +23,7 @@ from .session_store import (
     create_session,
     get_state,
     set_state,
+    wait_for_session_persistence,
 )
 
 logger = logging.getLogger("UFC_AGENT")
@@ -91,6 +92,7 @@ def start_chat(
         )
 
         # Store session into a centralized store so other workers can rehydrate it later
+        session_persisted = False
         try:
             create_session(
                 session_id,
@@ -101,9 +103,24 @@ def start_chat(
             )
             logger.debug("ℹ️ [SESSION] Persistida nova sessão: %s", session_id)
             set_state(session_id, {"pending_selection": None})
+            session_persisted = True
         except Exception:
             # If session store not configured, ignore and fallback to in-memory
             pass
+
+        if session_persisted and not wait_for_session_persistence(
+            session_id, timeout=3.0
+        ):
+            logger.error(
+                "❌ [SESSION] Sessão %s criada mas não visível no Redis após persistência",
+                session_id,
+            )
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Não foi possível persistir a sessão no Redis. Tente novamente em alguns segundos."
+                ),
+            )
 
         # Context loaded into the chat SDK; remove the temp file from disk.
         try:
@@ -154,9 +171,12 @@ def handle_chat_message(
     """
     # Prefer messages from the shared session store; if no messages exist, the session is invalid.
     messages = get_messages(session_id)
+    # detect whether Redis is present and log for diagnostics when messages are missing
+    from .session_store import is_redis_available
+
     if messages is None:
         logger.warning(
-            f"⚠️ [SISTEMA] Tentativa de acesso a sessão inválida: {session_id}"
+            f"⚠️ [SISTEMA] Tentativa de acesso a sessão inválida: {session_id} - redis={is_redis_available()}"
         )
         raise HTTPException(status_code=404, detail="Sessão inválida")
 

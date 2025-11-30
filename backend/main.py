@@ -77,7 +77,7 @@ has_api_key = bool(os.environ.get("GOOGLE_API_KEY"))
 has_service_json = bool(os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON"))
 has_application_creds = bool(
     os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-) and os.path.exists(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")) # type: ignore
+) and os.path.exists(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))  # type: ignore
 
 # Allow developers to bypass the strict requirement in non-production environments by setting
 # REQUIRE_GOOGLE_CREDENTIALS=false. By default, we require credentials (for production deployments).
@@ -148,6 +148,7 @@ async def debug_alocacoes():
     except Exception as e:
         logger.exception("Erro debug carregar_alocacoes: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/debug/sessions", include_in_schema=False)
 async def debug_sessions():

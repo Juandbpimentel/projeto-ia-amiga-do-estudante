@@ -4,7 +4,7 @@ import asyncio
 import inspect
 from google import genai
 from google.genai import types
-from .session_store import get_messages
+from .session_store import get_messages, is_redis_available
 from . import tooling
 
 logger = logging.getLogger("UFC_AGENT")
@@ -54,6 +54,12 @@ def ensure_chat_obj(
     # Replay prior user messages to rebuild conversation context in the SDK. This makes additional
     # API requests, which can incur costs but ensures context is consistent across workers.
     messages = get_messages(session_id) or []
+    logger.debug(
+        "ℹ️ [SESSION_MANAGER] ensure_chat_obj: session=%s messages_loaded=%s redis=%s",
+        session_id,
+        len(messages),
+        is_redis_available(),
+    )
     for m in messages:
         if m.get("role") == "user":
             try:
