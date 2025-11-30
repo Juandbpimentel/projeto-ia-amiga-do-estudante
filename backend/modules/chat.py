@@ -171,6 +171,8 @@ def handle_chat_message(
     """
     # Prefer messages from the shared session store; if no messages exist, the session is invalid.
     messages = get_messages(session_id)
+    if messages is None and wait_for_session_persistence(session_id, timeout=1.0):
+        messages = get_messages(session_id)
     # detect whether Redis is present and log for diagnostics when messages are missing
     from .session_store import is_redis_available
 
