@@ -26,7 +26,7 @@ def ensure_chat_obj(
     session_id: str,
     my_tools: List[Any],
     system_instr: str,
-    model_name: str = "gemini-2.5-flash",
+    model_name: str = "gemini-2.5-flash-lite",
 ) -> Any:
     """Ensure we have a chat object for this session (create and rehydrate if needed).
     This is a synchronous wrapper that awaits async callables when needed.
